@@ -76,4 +76,10 @@ export interface PlatformAdapter {
   edit(handle: MessageHandle, content: OutboundContent): Promise<void>;
   /** "Working…" affordance. Best-effort; not all platforms support it. */
   react?(handle: MessageHandle, emoji: string): Promise<void>;
+  /**
+   * Whether a user is an admin of a channel, by the platform's own roles
+   * (Telegram chat admins, Discord guild permissions). DMs count as admin.
+   * Used to gate settings commands when no OPEN_TAG_ADMINS allowlist is set.
+   */
+  isChannelAdmin?(channelId: string, userId: string): Promise<boolean>;
 }

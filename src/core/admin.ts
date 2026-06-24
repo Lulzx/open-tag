@@ -1,17 +1,27 @@
 /**
  * Admin authorization for mutating control commands (roadmap step 5).
  *
- * Set OPEN_TAG_ADMINS to a comma-separated list of `platform:userId` (e.g.
- * "telegram:12345,discord:67890") to restrict who can change channel settings.
- * Left unset, every user is an admin — the right default for single-tenant,
- * self-hosted, trusted deployments. Platform-native role checks (Telegram chat
- * admins, Discord permissions) are a future refinement.
+ * Two layers, allowlist first:
+ *   1. OPEN_TAG_ADMINS — a comma-separated `platform:userId` allowlist. When
+ *      set it is authoritative (explicit override for any platform).
+ *   2. Otherwise, the platform's own roles decide (Telegram chat admins,
+ *      Discord guild permissions) via `adapter.isChannelAdmin`. DMs count as
+ *      admin. If the adapter can't decide, access is open (trusted single-tenant).
  */
 import type { Platform } from '../platform/types.ts';
 
-export function isAdmin(platform: Platform, userId: string): boolean {
+function allowlist(): Set<string> | null {
   const raw = process.env.OPEN_TAG_ADMINS?.trim();
-  if (!raw) return true; // open by default for trusted single-tenant deploys.
-  const allowed = new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
-  return allowed.has(`${platform}:${userId}`);
+  if (!raw) return null;
+  return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+}
+
+/** True when an explicit OPEN_TAG_ADMINS allowlist is configured. */
+export function hasAdminAllowlist(): boolean {
+  return allowlist() !== null;
+}
+
+/** Whether `platform:userId` is in the configured allowlist (false if none). */
+export function inAllowlist(platform: Platform, userId: string): boolean {
+  return allowlist()?.has(`${platform}:${userId}`) ?? false;
 }

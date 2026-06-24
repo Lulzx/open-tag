@@ -9,7 +9,7 @@
  * `PlatformAdapter`. It owns one `SessionMirror` per channel; the mirror's
  * persistent tail carries proactive (scheduled/ambient) output back too.
  */
-import { isAdmin } from './admin.ts';
+import { hasAdminAllowlist, inAllowlist } from './admin.ts';
 import { RateLimiter, shouldChimeIn } from './ambient.ts';
 import { ChannelConfigStore } from './channel-config.ts';
 import { ChannelRegistry } from './channel-registry.ts';
@@ -100,7 +100,7 @@ export class TeammateRuntime {
     sessionId: string,
     command: Command,
   ): Promise<void> {
-    if (isMutating(command) && !isAdmin(msg.platform, msg.userId)) {
+    if (isMutating(command) && !(await this.authorize(adapter, msg))) {
       await adapter.send(
         msg.channelId,
         { text: 'Only channel admins can change my settings.' },
@@ -109,6 +109,13 @@ export class TeammateRuntime {
       return;
     }
     await adapter.send(msg.channelId, { text: this.executeCommand(sessionId, command) }, { replyTo: msg.messageId });
+  }
+
+  /** Allowlist wins when set; otherwise defer to the platform's own roles. */
+  private async authorize(adapter: PlatformAdapter, msg: IncomingMessage): Promise<boolean> {
+    if (hasAdminAllowlist()) return inAllowlist(msg.platform, msg.userId);
+    if (adapter.isChannelAdmin) return adapter.isChannelAdmin(msg.channelId, msg.userId);
+    return true;
   }
 
   private executeCommand(sessionId: string, command: Command): string {

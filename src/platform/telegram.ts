@@ -93,6 +93,18 @@ export class TelegramAdapter implements PlatformAdapter {
     ]);
   }
 
+  async isChannelAdmin(channelId: string, userId: string): Promise<boolean> {
+    // A Telegram private chat's id equals the user's id — you own your own DM.
+    if (channelId === userId) return true;
+    try {
+      const member = await this.bot.api.getChatMember(chatRef(channelId), Number(userId));
+      return member.status === 'creator' || member.status === 'administrator';
+    } catch (err) {
+      console.error('[telegram] getChatMember failed:', err);
+      return false;
+    }
+  }
+
   /** grammY context → normalized IncomingMessage. Called only for text messages. */
   private normalize(ctx: Context, botId: number, botUsername: string): IncomingMessage {
     const m = ctx.message!;

@@ -14,6 +14,7 @@ import {
   Events,
   GatewayIntentBits,
   Partials,
+  PermissionFlagsBits,
   type Message,
   type SendableChannels,
 } from 'discord.js';
@@ -106,6 +107,23 @@ export class DiscordAdapter implements PlatformAdapter {
   async react(handle: MessageHandle, emoji: string): Promise<void> {
     const message = await this.resolveMessage(handle);
     await message.react(emoji);
+  }
+
+  async isChannelAdmin(channelId: string, userId: string): Promise<boolean> {
+    try {
+      const channel =
+        this.client.channels.cache.get(channelId) ?? (await this.client.channels.fetch(channelId));
+      if (!channel || channel.isDMBased()) return true; // you own your own DM.
+      if (!('guild' in channel) || !channel.guild) return false;
+      const member = await channel.guild.members.fetch(userId);
+      return (
+        member.permissions.has(PermissionFlagsBits.Administrator) ||
+        member.permissions.has(PermissionFlagsBits.ManageGuild)
+      );
+    } catch (err) {
+      console.error('[discord] admin check failed:', err);
+      return false;
+    }
   }
 
   private async sendableChannel(channelId: string): Promise<SendableChannels> {
