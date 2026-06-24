@@ -70,7 +70,8 @@ back, edited in place. Works on **Telegram and Discord** through one normalized 
 Models default to **Ollama Cloud** and swap with one string. Per-channel ambient mode, model,
 and tool permissions are set with in-chat admin commands. Optional **Postgres + pgvector**
 adds semantic recall (`recall_context`). Admin commands default to the platform's own roles
-(Telegram chat admins, Discord permissions). Next: bundled MCP connectors.
+(Telegram chat admins, Discord permissions). **MCP connectors** plug in as tools, opt-in per
+channel (`@bot mcp allow <server>`).
 
 - [x] **Step 0** — spike: Flue + AI Gateway, validate self-hostability
 - [x] **Step 1** — Telegram channel → shared session → agent → streamed reply

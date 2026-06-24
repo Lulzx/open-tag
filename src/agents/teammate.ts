@@ -10,6 +10,7 @@
  * providers; the routing wired in `app.ts` resolves it. Nothing else changes.
  */
 import { defineAgent, type AgentRouteHandler } from '@flue/runtime';
+import { getMcpToolsFor } from '../core/mcp.ts';
 import { recall } from '../core/memory.ts';
 import { getPolicy } from '../core/policy.ts';
 import { createMemoryTools } from '../shared/memory-tools.ts';
@@ -51,11 +52,13 @@ function buildSystemPrompt(sessionId: string): string {
   return `${base}\n\nWhat you remember about this channel:\n${facts.map((f) => `- ${f}`).join('\n')}`;
 }
 
-export default defineAgent(({ id }) => {
-  // Per-channel policy (step 5): pick the model and filter denied tools BEFORE
-  // they reach the model, so a denied capability can never be called.
+export default defineAgent(async ({ id }) => {
+  // Per-channel policy (step 5): pick the model, expose only the MCP connectors
+  // the channel allowed (default deny), and filter denied tools BEFORE they
+  // reach the model, so a denied capability can never be called.
   const policy = getPolicy(id);
-  const allTools = [...teammateTools, ...createScheduleTools(id), ...createMemoryTools(id)];
+  const mcpTools = await getMcpToolsFor(policy.mcpAllow);
+  const allTools = [...teammateTools, ...createScheduleTools(id), ...createMemoryTools(id), ...mcpTools];
   const tools = allTools.filter((tool) => !policy.toolDeny.includes(tool.name));
 
   return {

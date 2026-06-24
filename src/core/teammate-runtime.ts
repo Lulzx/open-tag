@@ -14,9 +14,10 @@ import { RateLimiter, shouldChimeIn } from './ambient.ts';
 import { ChannelConfigStore } from './channel-config.ts';
 import { ChannelRegistry } from './channel-registry.ts';
 import { type Command, HELP_TEXT, isMutating, parseCommand } from './commands.ts';
-import { allowTool, denyTool, getPolicy, resetTools, setModel } from './policy.ts';
+import { allowMcp, allowTool, denyMcp, denyTool, getPolicy, resetMcp, resetTools, setModel } from './policy.ts';
 import { SessionMirror } from './session-mirror.ts';
 import { sessionIdFor } from './session.ts';
+import { mcpServerNames } from '../shared/mcp-config.ts';
 import { DEFAULT_MODEL } from '../shared/model.ts';
 import { TOOL_CATALOG } from '../shared/tool-catalog.ts';
 import type { IncomingMessage, Platform, PlatformAdapter } from '../platform/types.ts';
@@ -125,11 +126,13 @@ export class TeammateRuntime {
       case 'settings': {
         const policy = getPolicy(sessionId);
         const denied = policy.toolDeny.length > 0 ? policy.toolDeny.join(', ') : 'none';
+        const mcp = policy.mcpAllow.length > 0 ? policy.mcpAllow.join(', ') : 'none';
         return [
           'Settings for this channel:',
           `• ambient: ${this.config.get(sessionId).ambient ? 'on' : 'off'}`,
           `• model: ${policy.model ?? `${DEFAULT_MODEL} (default)`}`,
           `• disabled tools: ${denied}`,
+          `• MCP connectors: ${mcp}`,
         ].join('\n');
       }
       case 'ambient': {
@@ -169,6 +172,24 @@ export class TeammateRuntime {
         const known = TOOL_CATALOG.includes(command.name) ? '' : ' (note: not a known tool name)';
         return `Disabled \`${command.name}\`${known} for this channel. Applies to new turns.`;
       }
+      case 'mcp-list': {
+        const allowed = new Set(getPolicy(sessionId).mcpAllow);
+        const servers = mcpServerNames();
+        if (servers.length === 0) return 'No MCP servers are configured (set OPEN_TAG_MCP_SERVERS).';
+        const lines = servers.map((name) => `${allowed.has(name) ? '✅' : '🚫'} ${name}`);
+        return ['MCP connectors for this channel (default off):', ...lines].join('\n');
+      }
+      case 'mcp-reset':
+        resetMcp(sessionId);
+        return 'All MCP connectors disabled for this channel. Applies to new turns.';
+      case 'mcp-allow': {
+        allowMcp(sessionId, command.name);
+        const known = mcpServerNames().includes(command.name) ? '' : ' (note: not a configured server)';
+        return `Enabled MCP server \`${command.name}\`${known} for this channel. Applies to new turns.`;
+      }
+      case 'mcp-deny':
+        denyMcp(sessionId, command.name);
+        return `Disabled MCP server \`${command.name}\` for this channel. Applies to new turns.`;
     }
   }
 

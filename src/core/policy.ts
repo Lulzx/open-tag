@@ -19,9 +19,11 @@ export interface ChannelPolicy {
   model?: string;
   /** Tool names the channel may NOT use. */
   toolDeny: string[];
+  /** MCP server names the channel MAY use. Default empty = deny all (opt-in). */
+  mcpAllow: string[];
 }
 
-const DEFAULT_POLICY: ChannelPolicy = { toolDeny: [] };
+const DEFAULT_POLICY: ChannelPolicy = { toolDeny: [], mcpAllow: [] };
 const storePath = process.env.OPEN_TAG_POLICY_PATH ?? './data/channel-policy.json';
 
 function readAll(): Record<string, ChannelPolicy> {
@@ -72,4 +74,16 @@ export function allowTool(sessionId: string, name: string): ChannelPolicy {
 
 export function resetTools(sessionId: string): ChannelPolicy {
   return update(sessionId, (p) => ({ ...p, toolDeny: [] }));
+}
+
+export function allowMcp(sessionId: string, name: string): ChannelPolicy {
+  return update(sessionId, (p) => ({ ...p, mcpAllow: [...new Set([...p.mcpAllow, name])] }));
+}
+
+export function denyMcp(sessionId: string, name: string): ChannelPolicy {
+  return update(sessionId, (p) => ({ ...p, mcpAllow: p.mcpAllow.filter((n) => n !== name) }));
+}
+
+export function resetMcp(sessionId: string): ChannelPolicy {
+  return update(sessionId, (p) => ({ ...p, mcpAllow: [] }));
 }

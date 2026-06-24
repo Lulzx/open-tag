@@ -17,7 +17,11 @@ export type Command =
   | { kind: 'tools-list' }
   | { kind: 'tools-allow'; name: string }
   | { kind: 'tools-deny'; name: string }
-  | { kind: 'tools-reset' };
+  | { kind: 'tools-reset' }
+  | { kind: 'mcp-list' }
+  | { kind: 'mcp-allow'; name: string }
+  | { kind: 'mcp-deny'; name: string }
+  | { kind: 'mcp-reset' };
 
 /** True for commands that change channel settings (admin-gated). */
 export function isMutating(command: Command): boolean {
@@ -26,6 +30,7 @@ export function isMutating(command: Command): boolean {
     case 'settings':
     case 'model-show':
     case 'tools-list':
+    case 'mcp-list':
       return false;
     case 'ambient':
       return command.arg !== 'status';
@@ -56,6 +61,13 @@ export function parseCommand(text: string): Command | null {
   const toolsDeny = /^tools\s+deny\s+(\S+)$/i.exec(t);
   if (toolsDeny) return { kind: 'tools-deny', name: toolsDeny[1] };
 
+  if (/^mcp$/i.test(t)) return { kind: 'mcp-list' };
+  if (/^mcp\s+reset$/i.test(t)) return { kind: 'mcp-reset' };
+  const mcpAllow = /^mcp\s+allow\s+(\S+)$/i.exec(t);
+  if (mcpAllow) return { kind: 'mcp-allow', name: mcpAllow[1] };
+  const mcpDeny = /^mcp\s+deny\s+(\S+)$/i.exec(t);
+  if (mcpDeny) return { kind: 'mcp-deny', name: mcpDeny[1] };
+
   return null;
 }
 
@@ -66,4 +78,5 @@ export const HELP_TEXT = [
   '• `ambient on|off|status` — let me chime in on messages I’m not tagged in',
   '• `model` / `model <provider/model>` / `model reset` — pick this channel’s model',
   '• `tools` / `tools deny <name>` / `tools allow <name>` / `tools reset` — control my tools',
+  '• `mcp` / `mcp allow <server>` / `mcp deny <server>` / `mcp reset` — per-channel MCP connectors',
 ].join('\n');
