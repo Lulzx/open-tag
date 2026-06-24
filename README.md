@@ -64,17 +64,19 @@ works; model-swap-by-one-string confirmed).
 
 ## Status
 
-**Early WIP.** `@mention` (or DM) the bot → it joins the shared per-channel session → the
-Flue teammate agent runs (with tools) → the reply streams back, edited in place. Works on
-**Telegram and Discord** through one normalized adapter seam. Models default to
-**Ollama Cloud** and swap with one string.
+**All five roadmap steps land.** `@mention` (or DM) the bot → it joins the shared per-channel
+session → the Flue teammate agent runs (tools, self-scheduling, memory) → the reply streams
+back, edited in place. Works on **Telegram and Discord** through one normalized adapter seam.
+Models default to **Ollama Cloud** and swap with one string. Per-channel ambient mode, model,
+and tool permissions are set with in-chat admin commands. Next: Postgres/pgvector recall,
+platform-native admin checks, and bundled MCP connectors.
 
 - [x] **Step 0** — spike: Flue + AI Gateway, validate self-hostability
 - [x] **Step 1** — Telegram channel → shared session → agent → streamed reply
 - [x] **Step 2** — second platform (Discord) on the same normalized adapter seam
 - [x] **Step 3** — durable self-scheduling: the agent can schedule follow-ups for itself
 - [x] **Step 4** — ambient mode (opt-in, triaged, rate-limited) + per-channel memory
-- [ ] **Step 5** — permissions, admin, model-picker
+- [x] **Step 5** — per-channel tool RBAC, model-picker, and admin commands
 
 > Step 2 proved the seam: adding Discord was one new adapter (`src/platform/discord.ts`)
 > plus the launcher's env selection — the product layer did not change. A new platform is one file.
@@ -87,6 +89,10 @@ Flue teammate agent runs (with tools) → the reply streams back, edited in plac
 > then a conservative, rate-limited triage decides when to chime in on messages it wasn't
 > addressed in. `remember_fact` keeps durable per-channel facts (injected into the prompt) on
 > top of the rolling memory Flue's continuing session already provides.
+>
+> Step 5 puts channels in control. `@bot help` lists the admin commands: `model <provider/model>`
+> picks the channel's model, `tools deny <name>` enforces per-channel RBAC (denied tools are
+> filtered out before the model ever sees them), and `OPEN_TAG_ADMINS` gates who may change settings.
 
 ## Quick start
 

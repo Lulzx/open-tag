@@ -9,12 +9,16 @@
  * `PlatformAdapter`. It owns one `SessionMirror` per channel; the mirror's
  * persistent tail carries proactive (scheduled/ambient) output back too.
  */
+import { isAdmin } from './admin.ts';
 import { RateLimiter, shouldChimeIn } from './ambient.ts';
 import { ChannelConfigStore } from './channel-config.ts';
 import { ChannelRegistry } from './channel-registry.ts';
-import { type Command, parseCommand } from './commands.ts';
+import { type Command, HELP_TEXT, isMutating, parseCommand } from './commands.ts';
+import { allowTool, denyTool, getPolicy, resetTools, setModel } from './policy.ts';
 import { SessionMirror } from './session-mirror.ts';
 import { sessionIdFor } from './session.ts';
+import { DEFAULT_MODEL } from '../shared/model.ts';
+import { TOOL_CATALOG } from '../shared/tool-catalog.ts';
 import type { IncomingMessage, Platform, PlatformAdapter } from '../platform/types.ts';
 
 export class TeammateRuntime {
@@ -96,17 +100,69 @@ export class TeammateRuntime {
     sessionId: string,
     command: Command,
   ): Promise<void> {
-    let reply: string;
-    if (command.arg === 'status') {
-      reply = `Ambient mode is ${this.config.get(sessionId).ambient ? 'on' : 'off'} for this channel.`;
-    } else {
-      const on = command.arg === 'on';
-      this.config.setAmbient(sessionId, on);
-      reply = on
-        ? "Ambient mode enabled — I'll chime in when I think I can help."
-        : "Ambient mode disabled — I'll only respond when @mentioned.";
+    if (isMutating(command) && !isAdmin(msg.platform, msg.userId)) {
+      await adapter.send(
+        msg.channelId,
+        { text: 'Only channel admins can change my settings.' },
+        { replyTo: msg.messageId },
+      );
+      return;
     }
-    await adapter.send(msg.channelId, { text: reply }, { replyTo: msg.messageId });
+    await adapter.send(msg.channelId, { text: this.executeCommand(sessionId, command) }, { replyTo: msg.messageId });
+  }
+
+  private executeCommand(sessionId: string, command: Command): string {
+    switch (command.kind) {
+      case 'help':
+        return HELP_TEXT;
+      case 'settings': {
+        const policy = getPolicy(sessionId);
+        const denied = policy.toolDeny.length > 0 ? policy.toolDeny.join(', ') : 'none';
+        return [
+          'Settings for this channel:',
+          `• ambient: ${this.config.get(sessionId).ambient ? 'on' : 'off'}`,
+          `• model: ${policy.model ?? `${DEFAULT_MODEL} (default)`}`,
+          `• disabled tools: ${denied}`,
+        ].join('\n');
+      }
+      case 'ambient': {
+        if (command.arg === 'status') {
+          return `Ambient mode is ${this.config.get(sessionId).ambient ? 'on' : 'off'} for this channel.`;
+        }
+        const on = command.arg === 'on';
+        this.config.setAmbient(sessionId, on);
+        return on
+          ? "Ambient mode enabled — I'll chime in when I think I can help."
+          : "Ambient mode disabled — I'll only respond when @mentioned.";
+      }
+      case 'model-show':
+        return `Model: ${getPolicy(sessionId).model ?? `${DEFAULT_MODEL} (default)`}`;
+      case 'model-reset':
+        setModel(sessionId, undefined);
+        return `Model reset to the default (${DEFAULT_MODEL}). Applies to new turns.`;
+      case 'model-set':
+        if (!command.model.includes('/')) {
+          return 'Model must look like `provider/model`, e.g. `ollama/gpt-oss:120b`.';
+        }
+        setModel(sessionId, command.model);
+        return `Model set to \`${command.model}\` for this channel. Applies to new turns.`;
+      case 'tools-list': {
+        const denied = new Set(getPolicy(sessionId).toolDeny);
+        const lines = TOOL_CATALOG.map((name) => `${denied.has(name) ? '🚫' : '✅'} ${name}`);
+        return ['Tools for this channel:', ...lines].join('\n');
+      }
+      case 'tools-reset':
+        resetTools(sessionId);
+        return 'All tools re-enabled for this channel. Applies to new turns.';
+      case 'tools-allow':
+        allowTool(sessionId, command.name);
+        return `Enabled \`${command.name}\`. Applies to new turns.`;
+      case 'tools-deny': {
+        denyTool(sessionId, command.name);
+        const known = TOOL_CATALOG.includes(command.name) ? '' : ' (note: not a known tool name)';
+        return `Disabled \`${command.name}\`${known} for this channel. Applies to new turns.`;
+      }
+    }
   }
 
   private async submit(
