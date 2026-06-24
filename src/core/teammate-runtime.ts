@@ -1,44 +1,78 @@
 /**
  * The product layer, platform-agnostic (DESIGN.md §2).
  *
- *   incoming message  →  shared per-channel session  (multiplayer key + lock)
- *                     →  Flue teammate agent          (SDK send + stream)
- *                     →  reply streamed back, edited in place (StreamRenderer)
+ *   incoming message  →  shared per-channel session  (multiplayer key)
+ *                     →  Flue teammate agent          (submit + mirror)
+ *                     →  every assistant turn rendered to the channel
  *
- * This is the whole point of the normalized seam: `attachTeammate` knows nothing
- * about Telegram or Discord — it speaks only `PlatformAdapter`. A new platform
- * is a new adapter file; this function does not change. (Roadmap step 2.)
+ * `TeammateRuntime` knows nothing about Telegram or Discord — it speaks only
+ * `PlatformAdapter`. It owns one `SessionMirror` per channel; the mirror's
+ * persistent tail is what carries proactive (scheduled/ambient) output back to
+ * the channel, not just direct replies.
  */
-import { StreamRenderer } from './renderer.ts';
-import { sessionIdFor, withChannelLock } from './session.ts';
-import { runTeammate } from './teammate-client.ts';
-import type { PlatformAdapter } from '../platform/types.ts';
+import { ChannelRegistry } from './channel-registry.ts';
+import { SessionMirror } from './session-mirror.ts';
+import { sessionIdFor } from './session.ts';
+import type { IncomingMessage, Platform, PlatformAdapter } from '../platform/types.ts';
 
-export function attachTeammate(adapter: PlatformAdapter): void {
-  adapter.onMessage(async (msg) => {
+export class TeammateRuntime {
+  private readonly adapters = new Map<Platform, PlatformAdapter>();
+  private readonly registry: ChannelRegistry;
+  private readonly mirrors = new Map<string, SessionMirror>();
+
+  constructor(adapters: PlatformAdapter[], registry: ChannelRegistry = new ChannelRegistry()) {
+    for (const adapter of adapters) this.adapters.set(adapter.platform, adapter);
+    this.registry = registry;
+  }
+
+  /** Wire every configured adapter's inbound messages into the product layer. */
+  attach(): void {
+    for (const adapter of this.adapters.values()) {
+      adapter.onMessage((msg) => this.handle(msg));
+    }
+  }
+
+  /** Re-tail known channels after a restart so missed proactive output renders. */
+  resume(): void {
+    for (const entry of this.registry.all()) {
+      const adapter = this.adapters.get(entry.platform);
+      if (!adapter) continue; // platform not configured this run.
+      this.ensureMirror(entry.sessionId, adapter, entry.channelId, entry.offset).resume();
+    }
+  }
+
+  private async handle(msg: IncomingMessage): Promise<void> {
     // Spine: respond only when addressed. Ambient triage on non-mentions is step 4.
-    if (!msg.mentionsBot) return;
-    if (!msg.text) return;
+    if (!msg.mentionsBot || !msg.text) return;
+    const adapter = this.adapters.get(msg.platform);
+    if (!adapter) return;
 
     const sessionId = sessionIdFor(msg.platform, msg.channelId);
+    this.registry.remember(sessionId, msg.platform, msg.channelId);
+    const mirror = this.ensureMirror(sessionId, adapter, msg.channelId, this.registry.get(sessionId)?.offset);
 
-    // Serialize concurrent turns for the SAME channel so they queue on the shared
-    // session instead of racing it; different channels still run concurrently.
-    await withChannelLock(sessionId, async () => {
-      const renderer = new StreamRenderer(adapter, msg.channelId, { replyTo: msg.messageId });
-      await renderer.open();
-      try {
-        await runTeammate({
-          sessionId,
-          message: `${msg.userDisplay}: ${msg.text}`,
-          onDelta: (text) => renderer.push(text),
-          onToolStart: (tool) => renderer.setNote(`🔧 ${tool}…`),
-        });
-        await renderer.finish();
-      } catch (err) {
-        console.error(`[open-tag] turn failed (${adapter.platform}):`, err);
-        await renderer.fail(err);
-      }
-    });
-  });
+    try {
+      // Prefix the speaker's name so the shared session knows who said what.
+      await mirror.submit(`${msg.userDisplay}: ${msg.text}`, msg.messageId);
+    } catch (err) {
+      console.error(`[open-tag] submit failed (${msg.platform}):`, err);
+    }
+  }
+
+  private ensureMirror(
+    sessionId: string,
+    adapter: PlatformAdapter,
+    channelId: string,
+    startOffset?: string,
+  ): SessionMirror {
+    let mirror = this.mirrors.get(sessionId);
+    if (!mirror) {
+      mirror = new SessionMirror(adapter, channelId, sessionId, {
+        startOffset,
+        onOffset: (offset) => this.registry.setOffset(sessionId, offset),
+      });
+      this.mirrors.set(sessionId, mirror);
+    }
+    return mirror;
+  }
 }

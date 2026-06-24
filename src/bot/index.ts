@@ -2,14 +2,15 @@
  * open-tag bot entry — the launcher.
  *
  * Selects platform adapters from the environment and wires each into the same
- * platform-agnostic product layer (`attachTeammate`). Adding Discord alongside
- * Telegram (roadmap step 2) changed only this selection and a new adapter file:
- * the session, renderer, and agent-client code did not move.
+ * platform-agnostic product layer (`TeammateRuntime`). Adding a platform is one
+ * adapter file plus one line here.
  *
  * Separate process from the Flue server (`flue dev` / `dist/server.mjs`), which
- * hosts the agent; the bot reaches it over the Flue SDK at FLUE_BASE_URL.
+ * hosts the agent and the scheduler; the bot reaches it over the Flue SDK at
+ * FLUE_BASE_URL and mirrors each channel's session — including proactive output
+ * (scheduled tasks) — back to the channel.
  */
-import { attachTeammate } from '../core/teammate-runtime.ts';
+import { TeammateRuntime } from '../core/teammate-runtime.ts';
 import { DiscordAdapter } from '../platform/discord.ts';
 import { TelegramAdapter } from '../platform/telegram.ts';
 import type { PlatformAdapter } from '../platform/types.ts';
@@ -32,6 +33,8 @@ async function main(): Promise<void> {
 
   console.log(`[open-tag] connecting to Flue agent at ${process.env.FLUE_BASE_URL ?? 'http://127.0.0.1:3583'}`);
 
+  const runtime = new TeammateRuntime(adapters);
+
   const shutdown = () => {
     console.log('\n[open-tag] shutting down…');
     Promise.allSettled(adapters.map((a) => a.stop())).finally(() => process.exit(0));
@@ -39,9 +42,11 @@ async function main(): Promise<void> {
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
 
-  for (const adapter of adapters) attachTeammate(adapter);
+  runtime.attach();
   // start() resolves once each adapter is connected; their sockets keep us alive.
   await Promise.all(adapters.map((a) => a.start()));
+  // Re-tail known channels so output produced while the bot was down still renders.
+  runtime.resume();
   console.log(`[open-tag] live on: ${adapters.map((a) => a.platform).join(', ')}`);
 }
 

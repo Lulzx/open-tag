@@ -72,13 +72,16 @@ Flue teammate agent runs (with tools) → the reply streams back, edited in plac
 - [x] **Step 0** — spike: Flue + AI Gateway, validate self-hostability
 - [x] **Step 1** — Telegram channel → shared session → agent → streamed reply
 - [x] **Step 2** — second platform (Discord) on the same normalized adapter seam
-- [ ] **Step 3** — durable tasks + self-scheduling
+- [x] **Step 3** — durable self-scheduling: the agent can schedule follow-ups for itself
 - [ ] **Step 4** — ambient mode + per-channel memory
 - [ ] **Step 5** — permissions, admin, model-picker
 
 > Step 2 proved the seam: adding Discord was one new adapter (`src/platform/discord.ts`)
-> plus the launcher's env selection — the product layer (`attachTeammate`, session, renderer,
-> agent client) did not change. A new platform is one file.
+> plus the launcher's env selection — the product layer did not change. A new platform is one file.
+>
+> Step 3 made the agent proactive. Each channel session is mirrored to the channel by a
+> persistent event tail (`SessionMirror`), so output isn't tied to a request/response — a
+> durable `schedule_task` can fire hours later and the reply still lands in the channel.
 
 ## Quick start
 

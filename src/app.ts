@@ -15,6 +15,7 @@
 import { registerProvider } from '@flue/runtime';
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
+import { initScheduler } from './core/scheduler.ts';
 
 const ollamaApiKey = process.env.OLLAMA_API_KEY;
 const gatewayApiKey = process.env.AI_GATEWAY_API_KEY;
@@ -50,6 +51,10 @@ if (!ollamaApiKey && !gatewayApiKey) {
       'or AI_GATEWAY_API_KEY (Vercel AI Gateway) in .env — requests will fail at auth otherwise.',
   );
 }
+
+// Durable self-scheduling: load persisted tasks and re-arm their timers, then
+// fire them into the channel session via dispatch() when due (roadmap step 3).
+initScheduler();
 
 // Hono app wired to Flue's routing layer (agents, channels, workflows).
 const app = new Hono();

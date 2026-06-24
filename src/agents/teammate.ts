@@ -11,6 +11,7 @@
  */
 import { defineAgent, type AgentRouteHandler } from '@flue/runtime';
 import { DEFAULT_MODEL } from '../shared/model.ts';
+import { createScheduleTools } from '../shared/schedule-tools.ts';
 import { teammateTools } from '../shared/tools.ts';
 
 export const description = 'Shared per-channel team teammate that lives in your chat.';
@@ -31,11 +32,15 @@ function buildSystemPrompt(sessionId: string): string {
     'Be concise and direct — this is chat, not email. Short paragraphs; lists only when they help.',
     'You may use light Markdown. Use your tools when they get a better answer than guessing,',
     'and say briefly what you did rather than narrating every step.',
+    'You can act over time: use schedule_task to remind, follow up, or check back later —',
+    'it re-invokes you in this channel at the chosen time. When you receive an input of type',
+    `"open-tag.scheduled_task", a task you scheduled has come due: carry out its instruction now`,
+    'and post the result to the channel as a normal message.',
   ].join(' ');
 }
 
 export default defineAgent(({ id }) => ({
   model: DEFAULT_MODEL,
   instructions: buildSystemPrompt(id),
-  tools: teammateTools,
+  tools: [...teammateTools, ...createScheduleTools(id)],
 }));
