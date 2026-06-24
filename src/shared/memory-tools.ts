@@ -8,6 +8,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { forget, recall, remember } from '../core/memory.ts';
+import { recallEnabled, search } from '../core/recall.ts';
 
 export function createMemoryTools(sessionId: string) {
   const remember_fact = defineTool({
@@ -44,5 +45,24 @@ export function createMemoryTools(sessionId: string) {
     },
   });
 
-  return [remember_fact, list_facts, forget_fact];
+  // Semantic recall is only useful when a vector store (DATABASE_URL) is configured.
+  const recallTools = recallEnabled()
+    ? [
+        defineTool({
+          name: 'recall_context',
+          description:
+            'Search this channel’s remembered context for passages relevant to a question, ' +
+            'e.g. "what did we decide about the deploy schedule". Returns the closest matches.',
+          input: v.object({
+            query: v.pipe(v.string(), v.minLength(1), v.description('What to look up.')),
+          }),
+          output: v.object({ passages: v.array(v.string()) }),
+          async run({ input }) {
+            return { passages: await search(sessionId, input.query, 5) };
+          },
+        }),
+      ]
+    : [];
+
+  return [remember_fact, list_facts, forget_fact, ...recallTools];
 }

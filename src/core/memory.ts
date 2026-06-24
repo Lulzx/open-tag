@@ -16,6 +16,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { index } from './recall.ts';
 
 const storePath = process.env.OPEN_TAG_MEMORY_PATH ?? './data/memory.json';
 const facts = new Map<string, string[]>();
@@ -57,6 +58,8 @@ export function remember(sessionId: string, fact: string): number {
     list.push(trimmed);
     facts.set(sessionId, list);
     persist();
+    // Mirror into pgvector for semantic recall (no-op unless DATABASE_URL set).
+    void index(sessionId, 'fact', trimmed);
   }
   return list.length;
 }

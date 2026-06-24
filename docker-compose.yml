@@ -1,0 +1,28 @@
+# Postgres + pgvector for semantic recall (and optional Flue session storage).
+#
+#   docker compose up -d
+#   echo 'DATABASE_URL=postgres://opentag:opentag@localhost:5432/opentag' >> .env
+#
+# With DATABASE_URL set, src/db.ts moves Flue session state to Postgres and
+# src/core/recall.ts enables pgvector recall (it creates the `vector` extension
+# and the channel_memory table on first use). Embeddings also need an
+# embeddings-capable key — see OPEN_TAG_EMBED_* in .env.example.
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: opentag
+      POSTGRES_PASSWORD: opentag
+      POSTGRES_DB: opentag
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U opentag']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

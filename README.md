@@ -68,8 +68,9 @@ works; model-swap-by-one-string confirmed).
 session → the Flue teammate agent runs (tools, self-scheduling, memory) → the reply streams
 back, edited in place. Works on **Telegram and Discord** through one normalized adapter seam.
 Models default to **Ollama Cloud** and swap with one string. Per-channel ambient mode, model,
-and tool permissions are set with in-chat admin commands. Next: Postgres/pgvector recall,
-platform-native admin checks, and bundled MCP connectors.
+and tool permissions are set with in-chat admin commands. Optional **Postgres + pgvector**
+adds semantic recall (`recall_context`). Next: platform-native admin checks and bundled MCP
+connectors.
 
 - [x] **Step 0** — spike: Flue + AI Gateway, validate self-hostability
 - [x] **Step 1** — Telegram channel → shared session → agent → streamed reply
