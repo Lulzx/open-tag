@@ -1,10 +1,11 @@
 /**
  * Per-channel semantic recall over pgvector (DESIGN.md §5/§6).
  *
- * Durable facts (memory.ts) are injected into the prompt, but as a channel
- * accumulates many of them, injecting all is wasteful. This adds embeddings +
- * vector search so the agent can pull only the passages relevant to a question
- * ("what did we decide about X") via the recall_context tool.
+ * Stores embeddings for both curated facts (memory.ts) and raw channel history
+ * — every message and the agent's replies (ingested by the bot, kinds
+ * 'message'/'assistant'). The recall_context tool then pulls only the passages
+ * relevant to a question ("what did we decide about X") instead of relying on
+ * everything being injected into the prompt.
  *
  * Feature-flagged on DATABASE_URL: when unset, recall is disabled and the bot
  * falls back to plain injected facts — the app runs with zero extra infra.
@@ -88,12 +89,14 @@ async function embed(text: string): Promise<number[]> {
 /** Embed and store one piece of channel content. Best-effort; never throws. */
 export async function index(sessionId: string, kind: string, content: string): Promise<void> {
   if (!recallEnabled()) return;
+  const text = content.trim().slice(0, 8000); // bound embedding input.
+  if (!text) return;
   try {
     await ensureReady();
-    const vector = await embed(content);
+    const vector = await embed(text);
     await getPool().query(
       'INSERT INTO channel_memory (session_id, kind, content, embedding) VALUES ($1, $2, $3, $4::vector)',
-      [sessionId, kind, content, toVector(vector)],
+      [sessionId, kind, text, toVector(vector)],
     );
   } catch (err) {
     console.error('[recall] index failed:', err);

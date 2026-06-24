@@ -69,7 +69,7 @@ session → the Flue teammate agent runs (tools, self-scheduling, memory) → th
 back, edited in place. Works on **Telegram and Discord** through one normalized adapter seam.
 Models default to **Ollama Cloud** and swap with one string. Per-channel ambient mode, model,
 and tool permissions are set with in-chat admin commands. Optional **Postgres + pgvector**
-adds semantic recall (`recall_context`). Admin commands default to the platform's own roles
+adds semantic recall over channel history and facts (`recall_context`). Admin commands default to the platform's own roles
 (Telegram chat admins, Discord permissions). **MCP connectors** plug in as tools, opt-in per
 channel (`@bot mcp allow <server>`).
 

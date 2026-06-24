@@ -15,6 +15,7 @@ import { ChannelConfigStore } from './channel-config.ts';
 import { ChannelRegistry } from './channel-registry.ts';
 import { type Command, HELP_TEXT, isMutating, parseCommand } from './commands.ts';
 import { allowMcp, allowTool, denyMcp, denyTool, getPolicy, resetMcp, resetTools, setModel } from './policy.ts';
+import { index } from './recall.ts';
 import { SessionMirror } from './session-mirror.ts';
 import { sessionIdFor } from './session.ts';
 import { mcpServerNames } from '../shared/mcp-config.ts';
@@ -59,6 +60,12 @@ export class TeammateRuntime {
     const adapter = this.adapters.get(msg.platform);
     if (!adapter || !msg.text) return;
     const sessionId = sessionIdFor(msg.platform, msg.channelId);
+
+    // Record raw channel history for semantic recall — every message in a
+    // channel already using the bot (no-op unless DATABASE_URL is set).
+    if (this.registry.get(sessionId) && msg.text.trim().length >= 12) {
+      void index(sessionId, 'message', `${msg.userDisplay}: ${msg.text}`);
+    }
 
     if (msg.mentionsBot) {
       await this.handleAddressed(adapter, msg, sessionId);

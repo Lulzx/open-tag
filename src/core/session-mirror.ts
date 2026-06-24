@@ -10,6 +10,7 @@
  * User input is submitted fire-and-forget via `agents.send`; the tail handles
  * all rendering. Flue serializes submissions per instance, so turns never race.
  */
+import { index } from './recall.ts';
 import { StreamRenderer } from './renderer.ts';
 import { AGENT_NAME, teammateClient } from './teammate-client.ts';
 import type { PlatformAdapter } from '../platform/types.ts';
@@ -105,8 +106,11 @@ export class SessionMirror {
       }
       case 'idle': {
         if (this.active) {
+          const reply = this.acc;
           await this.active.finish();
           this.reset();
+          // Record the agent's reply for semantic recall (no-op unless enabled).
+          if (reply.trim().length >= 12) void index(this.sessionId, 'assistant', reply);
         }
         break;
       }
