@@ -1,0 +1,24 @@
+{
+  "name": "open-tag",
+  "version": "0.0.1",
+  "description": "Open-source model-agnostic team chat AI teammate",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "dev": "flue dev",
+    "build": "flue build",
+    "agent:hello": "flue run hello-world --input '{\"message\":\"Hello, who are you?\"}'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@flue/runtime": "1.0.0-beta.5",
+    "hono": "^4.12.27"
+  },
+  "devDependencies": {
+    "@flue/cli": "1.0.0-beta.5",
+    "typescript": "^6.0.3"
+  }
+}
