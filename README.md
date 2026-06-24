@@ -73,7 +73,7 @@ Flue teammate agent runs (with tools) → the reply streams back, edited in plac
 - [x] **Step 1** — Telegram channel → shared session → agent → streamed reply
 - [x] **Step 2** — second platform (Discord) on the same normalized adapter seam
 - [x] **Step 3** — durable self-scheduling: the agent can schedule follow-ups for itself
-- [ ] **Step 4** — ambient mode + per-channel memory
+- [x] **Step 4** — ambient mode (opt-in, triaged, rate-limited) + per-channel memory
 - [ ] **Step 5** — permissions, admin, model-picker
 
 > Step 2 proved the seam: adding Discord was one new adapter (`src/platform/discord.ts`)
@@ -82,6 +82,11 @@ Flue teammate agent runs (with tools) → the reply streams back, edited in plac
 > Step 3 made the agent proactive. Each channel session is mirrored to the channel by a
 > persistent event tail (`SessionMirror`), so output isn't tied to a request/response — a
 > durable `schedule_task` can fire hours later and the reply still lands in the channel.
+>
+> Step 4 lets it watch and remember. Ambient mode is off until a channel runs `@bot ambient on`;
+> then a conservative, rate-limited triage decides when to chime in on messages it wasn't
+> addressed in. `remember_fact` keeps durable per-channel facts (injected into the prompt) on
+> top of the rolling memory Flue's continuing session already provides.
 
 ## Quick start
 
