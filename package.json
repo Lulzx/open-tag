@@ -8,14 +8,20 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "dev": "flue dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "flue dev",
+    "dev:bot": "node --watch --env-file-if-exists=.env src/bot/index.ts",
     "build": "flue build",
+    "bot": "node --env-file-if-exists=.env src/bot/index.ts",
     "agent:hello": "flue run hello-world --input '{\"message\":\"Hello, who are you?\"}'",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@flue/runtime": "1.0.0-beta.5",
-    "hono": "^4.12.27"
+    "@flue/sdk": "1.0.0-beta.5",
+    "grammy": "^1.44.0",
+    "hono": "^4.12.27",
+    "valibot": "^1.4.1"
   },
   "devDependencies": {
     "@flue/cli": "1.0.0-beta.5",

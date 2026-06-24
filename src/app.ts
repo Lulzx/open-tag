@@ -1,54 +1,57 @@
 /**
- * Flue app entry point.
+ * Flue app entry point — provider wiring (the model seam, DESIGN.md §4.3).
  *
- * Provider wiring happens here — one place, before any agent code runs.
- * We redirect the Anthropic provider through Vercel AI Gateway using its
- * OpenAI-compatible endpoint (base URL: https://ai-gateway.vercel.sh/v1).
+ * One place, before any agent runs, decides how `provider/model` strings reach
+ * a real endpoint. open-tag is model-agnostic: the same agent code runs on any
+ * of these by changing one string (OPEN_TAG_MODEL).
  *
- * Why the anthropic catalog provider + gateway baseUrl?
- *   - Pi's catalog already knows the Anthropic wire protocol.
- *   - Overriding baseUrl + apiKey is enough to reroute through the gateway.
- *   - The gateway accepts `provider/model` strings in the model field and
- *     forwards to the upstream provider transparently.
+ *   ollama/<model>     → Ollama Cloud (OpenAI-compatible)         [default]
+ *   anthropic/<model>  → Vercel AI Gateway (when AI_GATEWAY_API_KEY set)
+ *   openai/<model>     → Vercel AI Gateway (when AI_GATEWAY_API_KEY set)
  *
- * Why NOT register a brand-new "vercel-gateway" provider?
- *   - That would require specifying api:'openai-completions' and listing
- *     every model. By overriding the catalog provider we keep model metadata.
- *
- * To switch all traffic to a different gateway (e.g. OpenRouter, a local
- * Ollama): change AI_GATEWAY_BASE_URL. One env var, zero code changes.
+ * Add a provider = one `registerProvider` call here. Nothing in the product or
+ * platform layers ever touches a provider.
  */
 import { registerProvider } from '@flue/runtime';
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 
-const gatewayBaseUrl = process.env.AI_GATEWAY_BASE_URL ?? 'https://ai-gateway.vercel.sh/v1';
+const ollamaApiKey = process.env.OLLAMA_API_KEY;
 const gatewayApiKey = process.env.AI_GATEWAY_API_KEY;
+const gatewayBaseUrl = process.env.AI_GATEWAY_BASE_URL ?? 'https://ai-gateway.vercel.sh/v1';
 
-if (!gatewayApiKey) {
-  // Warn loudly at startup so the error message is clear.
+// --- Ollama Cloud (default) -------------------------------------------------
+// Hosted Ollama models via its OpenAI-compatible endpoint. `ollama` is not a
+// catalog provider, so we declare the wire protocol + base URL from scratch.
+// Model specifiers look like `ollama/gpt-oss:120b` (the colon is part of the
+// model id, not a provider separator). Keys: https://ollama.com/settings/keys
+if (ollamaApiKey) {
+  registerProvider('ollama', {
+    api: 'openai-completions',
+    baseUrl: process.env.OLLAMA_BASE_URL ?? 'https://ollama.com/v1',
+    apiKey: ollamaApiKey,
+  });
+}
+
+// --- Vercel AI Gateway (optional) ------------------------------------------
+// Route the catalog `anthropic`/`openai` providers through the gateway: one
+// key, every provider, with routing + fallback. Overriding a catalog provider
+// id preserves Pi's model metadata (cost, context window, wire protocol) and
+// only swaps the endpoint + key. Change AI_GATEWAY_BASE_URL to use a different
+// gateway (OpenRouter, a local proxy, …) with zero code changes.
+if (gatewayApiKey) {
+  registerProvider('anthropic', { baseUrl: gatewayBaseUrl, apiKey: gatewayApiKey });
+  registerProvider('openai', { baseUrl: gatewayBaseUrl, apiKey: gatewayApiKey });
+}
+
+if (!ollamaApiKey && !gatewayApiKey) {
   console.warn(
-    '[open-tag] AI_GATEWAY_API_KEY is not set. ' +
-    'Requests will fail at the auth step. ' +
-    'Set it in .env to run the agent.'
+    '[open-tag] No model provider key set. Set OLLAMA_API_KEY (Ollama Cloud) ' +
+      'or AI_GATEWAY_API_KEY (Vercel AI Gateway) in .env — requests will fail at auth otherwise.',
   );
 }
 
-// Route the built-in 'anthropic' catalog provider through Vercel AI Gateway.
-// The gateway exposes an OpenAI-compatible endpoint at /v1, so we point
-// the `openai` catalog provider there too — any 'openai/...' model string
-// will then resolve through the gateway as well.
-registerProvider('anthropic', {
-  baseUrl: gatewayBaseUrl,
-  apiKey: gatewayApiKey,
-});
-
-registerProvider('openai', {
-  baseUrl: gatewayBaseUrl,
-  apiKey: gatewayApiKey,
-});
-
-// Hono app wired to Flue's routing layer.
+// Hono app wired to Flue's routing layer (agents, channels, workflows).
 const app = new Hono();
 app.route('/', flue());
 

@@ -6,6 +6,9 @@ node_modules/
 dist/
 .flue/
 
+# Durable state (file-backed SQLite)
+data/
+
 # Environment
 .env
 .env.local
