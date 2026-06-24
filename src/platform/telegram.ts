@@ -58,9 +58,18 @@ export class TelegramAdapter implements PlatformAdapter {
       }
     });
 
-    console.log(`[telegram] @${me.username} polling…`);
-    // bot.start() runs the long-poll loop; the promise stays pending until stop().
-    await this.bot.start({ drop_pending_updates: true });
+    // bot.start() runs the long-poll loop and its promise stays pending until
+    // stop(); resolve start() once polling is live (via onStart) so other
+    // adapters can start too. The loop keeps the process alive in the background.
+    await new Promise<void>((resolve) => {
+      void this.bot.start({
+        drop_pending_updates: true,
+        onStart: () => {
+          console.log(`[telegram] @${me.username} polling…`);
+          resolve();
+        },
+      });
+    });
   }
 
   async stop(): Promise<void> {

@@ -19,7 +19,7 @@
 Claude Tag is a great idea wrapped in two constraints: it's **Slack-only** and **Opus-only**.
 open-tag keeps the idea and drops both constraints:
 
-- **Platform-agnostic** — Telegram first, then Discord, Slack, and anything with a bot API.
+- **Platform-agnostic** — Telegram and Discord today, Slack and anything with a bot API next.
 - **Model-agnostic** — Ollama Cloud (default), Anthropic, OpenAI, or any provider, swappable with a single config string.
 - **Open source & self-hostable** — Apache-2.0, runs on your own infra with just an LLM API key.
 
@@ -37,7 +37,7 @@ open-tag is deliberately **not** an agent framework. It's a thin **product layer
 open building blocks, so we build only what's actually differentiated:
 
 ```
-   Telegram / Discord / Slack channels        ← platform seam (we own; grammY for Telegram)
+   Telegram / Discord / Slack channels        ← platform seam (we own; grammY + discord.js)
                   │
    open-tag product layer                      ← what we build:
    shared per-channel sessions · ambient          multiplayer state, ambient triage,
@@ -53,7 +53,7 @@ open building blocks, so we build only what's actually differentiated:
 |---|---|---|
 | Agent core | [Flue](https://flueframework.com/) + Pi harness | adopt |
 | Model seam | [Ollama Cloud](https://ollama.com/) (default) · [Vercel AI Gateway](https://vercel.com/ai-gateway/models) | adopt |
-| Telegram channel | [grammY](https://grammy.dev/) | build |
+| Platform adapters | [grammY](https://grammy.dev/) (Telegram) · [discord.js](https://discord.js.org/) (Discord) | build |
 | Connectors | [MCP](https://modelcontextprotocol.io/) servers as Flue tools | adopt |
 | State / memory | Postgres + pgvector | build (schema) |
 | Runtime | Node 22.19+, TypeScript, pnpm | — |
@@ -64,16 +64,21 @@ works; model-swap-by-one-string confirmed).
 
 ## Status
 
-**Early WIP.** The Telegram vertical works: `@mention` (or DM) the bot → it joins the
-shared per-channel session → the Flue teammate agent runs (with tools) → the reply streams
-back, edited in place. Models default to **Ollama Cloud** and swap with one string.
+**Early WIP.** `@mention` (or DM) the bot → it joins the shared per-channel session → the
+Flue teammate agent runs (with tools) → the reply streams back, edited in place. Works on
+**Telegram and Discord** through one normalized adapter seam. Models default to
+**Ollama Cloud** and swap with one string.
 
 - [x] **Step 0** — spike: Flue + AI Gateway, validate self-hostability
 - [x] **Step 1** — Telegram channel → shared session → agent → streamed reply
-- [ ] **Step 2** — second platform (proves the abstraction)
+- [x] **Step 2** — second platform (Discord) on the same normalized adapter seam
 - [ ] **Step 3** — durable tasks + self-scheduling
 - [ ] **Step 4** — ambient mode + per-channel memory
 - [ ] **Step 5** — permissions, admin, model-picker
+
+> Step 2 proved the seam: adding Discord was one new adapter (`src/platform/discord.ts`)
+> plus the launcher's env selection — the product layer (`attachTeammate`, session, renderer,
+> agent client) did not change. A new platform is one file.
 
 ## Quick start
 
@@ -85,11 +90,12 @@ back, edited in place. Models default to **Ollama Cloud** and swap with one stri
 git clone https://github.com/Lulzx/open-tag.git
 cd open-tag
 pnpm install
-cp .env.example .env          # add TELEGRAM_BOT_TOKEN and OLLAMA_API_KEY
-pnpm dev                      # runs the Flue agent server + the Telegram bot
+cp .env.example .env          # add OLLAMA_API_KEY + TELEGRAM_BOT_TOKEN and/or DISCORD_BOT_TOKEN
+pnpm dev                      # runs the Flue agent server + the bot (every platform with a token)
 ```
 
-Then `@mention` your bot in a group (or DM it) and it replies in the shared channel session.
+Then `@mention` your bot in a Telegram or Discord channel (or DM it) and it replies in the
+shared channel session.
 
 `pnpm dev` runs two processes — start them separately if you prefer:
 

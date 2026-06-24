@@ -1,65 +1,48 @@
 /**
- * open-tag bot entry — the product layer wiring (roadmap step 1).
+ * open-tag bot entry — the launcher.
  *
- *   Telegram message  →  normalized IncomingMessage  (platform adapter)
- *                     →  shared per-channel session   (multiplayer key + lock)
- *                     →  Flue teammate agent          (SDK send + stream)
- *                     →  streamed reply, edited in place (StreamRenderer)
+ * Selects platform adapters from the environment and wires each into the same
+ * platform-agnostic product layer (`attachTeammate`). Adding Discord alongside
+ * Telegram (roadmap step 2) changed only this selection and a new adapter file:
+ * the session, renderer, and agent-client code did not move.
  *
- * This is a separate process from the Flue server (`flue dev`/`dist/server.mjs`),
- * which hosts the agent. Long-poll transports are application-owned infra, so
- * the bot talks to the agent over the Flue SDK at FLUE_BASE_URL.
+ * Separate process from the Flue server (`flue dev` / `dist/server.mjs`), which
+ * hosts the agent; the bot reaches it over the Flue SDK at FLUE_BASE_URL.
  */
-import { StreamRenderer } from '../core/renderer.ts';
-import { sessionIdFor, withChannelLock } from '../core/session.ts';
-import { runTeammate } from '../core/teammate-client.ts';
+import { attachTeammate } from '../core/teammate-runtime.ts';
+import { DiscordAdapter } from '../platform/discord.ts';
 import { TelegramAdapter } from '../platform/telegram.ts';
-import type { IncomingMessage } from '../platform/types.ts';
+import type { PlatformAdapter } from '../platform/types.ts';
 
-const token = process.env.TELEGRAM_BOT_TOKEN;
-if (!token) {
-  console.error('[open-tag] TELEGRAM_BOT_TOKEN is not set. Get one from @BotFather and add it to .env.');
-  process.exit(1);
+function configuredAdapters(): PlatformAdapter[] {
+  const adapters: PlatformAdapter[] = [];
+  if (process.env.TELEGRAM_BOT_TOKEN) adapters.push(new TelegramAdapter(process.env.TELEGRAM_BOT_TOKEN));
+  if (process.env.DISCORD_BOT_TOKEN) adapters.push(new DiscordAdapter(process.env.DISCORD_BOT_TOKEN));
+  return adapters;
 }
 
-const adapter = new TelegramAdapter(token);
-
-adapter.onMessage(async (msg: IncomingMessage) => {
-  // Spine: respond only when addressed. Ambient triage on non-mentions is step 4.
-  if (!msg.mentionsBot) return;
-  if (!msg.text) return;
-
-  const sessionId = sessionIdFor(msg.platform, msg.channelId);
-
-  // Serialize concurrent turns for the SAME channel so they queue on the shared
-  // session instead of racing it; different channels still run concurrently.
-  await withChannelLock(sessionId, async () => {
-    const renderer = new StreamRenderer(adapter, msg.channelId, { replyTo: msg.messageId });
-    await renderer.open();
-    try {
-      await runTeammate({
-        sessionId,
-        message: `${msg.userDisplay}: ${msg.text}`,
-        onDelta: (text) => renderer.push(text),
-        onToolStart: (tool) => renderer.setNote(`🔧 ${tool}…`),
-      });
-      await renderer.finish();
-    } catch (err) {
-      console.error('[open-tag] turn failed:', err);
-      await renderer.fail(err);
-    }
-  });
-});
-
 async function main(): Promise<void> {
+  const adapters = configuredAdapters();
+  if (adapters.length === 0) {
+    console.error(
+      '[open-tag] No platform token set. Set TELEGRAM_BOT_TOKEN and/or DISCORD_BOT_TOKEN in .env.',
+    );
+    process.exit(1);
+  }
+
   console.log(`[open-tag] connecting to Flue agent at ${process.env.FLUE_BASE_URL ?? 'http://127.0.0.1:3583'}`);
+
   const shutdown = () => {
     console.log('\n[open-tag] shutting down…');
-    void adapter.stop().finally(() => process.exit(0));
+    Promise.allSettled(adapters.map((a) => a.stop())).finally(() => process.exit(0));
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
-  await adapter.start(); // runs the long-poll loop until stopped.
+
+  for (const adapter of adapters) attachTeammate(adapter);
+  // start() resolves once each adapter is connected; their sockets keep us alive.
+  await Promise.all(adapters.map((a) => a.start()));
+  console.log(`[open-tag] live on: ${adapters.map((a) => a.platform).join(', ')}`);
 }
 
 void main();
