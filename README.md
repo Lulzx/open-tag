@@ -129,6 +129,49 @@ OPEN_TAG_MODEL=ollama/qwen3-coder:480b       # any Ollama Cloud model
 OPEN_TAG_MODEL=anthropic/claude-sonnet-4-6   # via Vercel AI Gateway (needs AI_GATEWAY_API_KEY)
 ```
 
+## Extending
+
+Two seams, both additive — neither touches the product layer.
+
+**A new platform** is one adapter file plus one line. Implement `PlatformAdapter`
+(`src/platform/types.ts`), export an `AdapterFactory`, and add it to the manifest:
+
+```ts
+// src/platform/msteams.ts
+export class MsTeamsAdapter implements PlatformAdapter { /* … */ }
+export const msteamsFactory: AdapterFactory = {
+  platform: 'msteams',
+  envHint: 'MSTEAMS_BOT_TOKEN',
+  fromEnv: () => (process.env.MSTEAMS_BOT_TOKEN ? new MsTeamsAdapter(process.env.MSTEAMS_BOT_TOKEN) : null),
+};
+
+// src/platform/adapters.ts  ← the only edit
+export const adapterFactories = [telegramFactory, discordFactory, msteamsFactory];
+```
+
+`Platform` is an open string, so nothing else changes — session keys, the admin
+allowlist, and the channel registry all keep working.
+
+**A new feature** is a plugin. Every command, tool, ambient behavior, and startup hook is a
+`Plugin` (`src/plugins/types.ts`) registered in `src/plugins/index.ts` — the built-ins
+(`help`, `model`, `tools`, `mcp`, ambient triage, recall ingestion, the 👀 ack, the
+self-scheduling and memory tools) are just plugins themselves. A plugin can contribute any of:
+
+```ts
+export const myPlugin: Plugin = {
+  name: 'my-feature',
+  commands: [{ name: 'ping', help: '• `ping` — pong', parse: (t) =>
+    /^ping$/i.test(t.trim()) ? { mutating: false, run: () => 'pong' } : null }],
+  tools: ({ sessionId }) => [/* defineTool(...) */],   // exposed to the agent
+  hooks: { onMessage(ctx) { /* observe every message */ } },
+  lifecycle: { onServerStart() { /* re-arm timers, warm caches */ } },
+};
+```
+
+Manifest order is resolution order. Commands and hooks run in the bot process; `tools` and
+`onServerStart` run in the agent server — so a plugin module must not import a platform SDK at
+the top level. See **[DESIGN.md](./DESIGN.md)** for the contracts.
+
 ## Contributing
 
 Early and moving fast — issues and ideas welcome. Start with [DESIGN.md](./DESIGN.md) to

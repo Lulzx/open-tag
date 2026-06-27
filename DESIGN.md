@@ -162,6 +162,41 @@ await runAgent('teammate', {
 Model-agnosticism is two layers: the **gateway** picks the provider, the **agent def**
 picks the model per task. Neither touches platform or product code.
 
+### 4.4 Plugin layer (features on top)
+
+The platform seam makes *platforms* pluggable; the plugin layer makes *features* pluggable.
+Every command, agent tool, ambient behavior, and startup hook is a `Plugin`, registered in one
+manifest (`src/plugins/index.ts`). The runtime and the agent are feature-agnostic — they
+iterate plugins rather than hard-coding a command `switch` or a tool array. The built-ins
+(`help`/`model`/`tools`/`mcp`, ambient triage, recall ingestion, the 👀 ack, the
+self-scheduling and memory tools) are themselves plugins, so a third-party feature is
+indistinguishable from a built-in one.
+
+```ts
+interface Plugin {
+  name: string
+  commands?: CommandSpec[]    // in-chat control commands         (bot process)
+  hooks?: MessageHooks        // onMessage / shouldChimeIn / onBeforeSubmit (bot)
+  lifecycle?: LifecycleHooks  // onServerStart / onBotStart / onBotStop
+  tools?: ToolProvider        // tools exposed to the agent        (server process)
+  toolNames?: string[]        // names for the RBAC catalog
+  describe?(ctx): string|null // a line for the `settings` command
+}
+```
+
+**One vocabulary, two processes.** A plugin declares its contributions once, but each process
+reads only its slice: the **bot** consumes `commands` / `hooks` / bot-lifecycle; the **agent
+server** consumes `tools` / `onServerStart` (tools are assembled inside `defineAgent`). So a
+plugin module must be importable in both — it may not import a platform SDK at the top level,
+and tool factories must be side-effect-free. Manifest order is resolution order (first matching
+command wins; `help`/`settings` lines and the tool catalog compose in order).
+
+The open platform type follows from this: `Platform` is an open `string` (each adapter declares
+its own id), and adapters register via an `AdapterFactory` manifest (`src/platform/adapters.ts`)
+— so a new platform needs no edit to the type, the launcher, or the product layer. Because the
+platform id is only a string component of the session key and the admin allowlist, widening it
+changes no serialized state.
+
 ---
 
 ## 5. How each hard part is solved
