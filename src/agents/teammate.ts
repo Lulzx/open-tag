@@ -10,13 +10,10 @@
  * providers; the routing wired in `app.ts` resolves it. Nothing else changes.
  */
 import { defineAgent, type AgentRouteHandler } from '@flue/runtime';
-import { getMcpToolsFor } from '../core/mcp.ts';
 import { recall } from '../core/memory.ts';
 import { getPolicy } from '../core/policy.ts';
-import { createMemoryTools } from '../shared/memory-tools.ts';
+import { collectTools } from '../plugins/collect.ts';
 import { DEFAULT_MODEL } from '../shared/model.ts';
-import { createScheduleTools } from '../shared/schedule-tools.ts';
-import { teammateTools } from '../shared/tools.ts';
 
 export const description = 'Shared per-channel team teammate that lives in your chat.';
 
@@ -55,10 +52,10 @@ function buildSystemPrompt(sessionId: string): string {
 export default defineAgent(async ({ id }) => {
   // Per-channel policy (step 5): pick the model, expose only the MCP connectors
   // the channel allowed (default deny), and filter denied tools BEFORE they
-  // reach the model, so a denied capability can never be called.
+  // reach the model, so a denied capability can never be called. Tools are
+  // contributed by plugins; we collect and then filter by the deny list.
   const policy = getPolicy(id);
-  const mcpTools = await getMcpToolsFor(policy.mcpAllow);
-  const allTools = [...teammateTools, ...createScheduleTools(id), ...createMemoryTools(id), ...mcpTools];
+  const allTools = await collectTools({ sessionId: id, mcpAllow: policy.mcpAllow });
   const tools = allTools.filter((tool) => !policy.toolDeny.includes(tool.name));
 
   return {
