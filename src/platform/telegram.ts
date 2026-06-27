@@ -8,6 +8,7 @@
  */
 import { Bot, type Context } from 'grammy';
 import type { ReactionTypeEmoji } from 'grammy/types';
+import type { AdapterFactory } from './registry.ts';
 import type {
   IncomingMessage,
   MessageHandle,
@@ -138,3 +139,11 @@ export class TelegramAdapter implements PlatformAdapter {
     };
   }
 }
+
+/** Registry entry — built when TELEGRAM_BOT_TOKEN is set (see registry.ts). */
+export const telegramFactory: AdapterFactory = {
+  platform: 'telegram',
+  envHint: 'TELEGRAM_BOT_TOKEN',
+  fromEnv: () =>
+    process.env.TELEGRAM_BOT_TOKEN ? new TelegramAdapter(process.env.TELEGRAM_BOT_TOKEN) : null,
+};

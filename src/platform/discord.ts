@@ -18,6 +18,7 @@ import {
   type Message,
   type SendableChannels,
 } from 'discord.js';
+import type { AdapterFactory } from './registry.ts';
 import type {
   IncomingMessage,
   MessageHandle,
@@ -173,3 +174,11 @@ export class DiscordAdapter implements PlatformAdapter {
     };
   }
 }
+
+/** Registry entry — built when DISCORD_BOT_TOKEN is set (see registry.ts). */
+export const discordFactory: AdapterFactory = {
+  platform: 'discord',
+  envHint: 'DISCORD_BOT_TOKEN',
+  fromEnv: () =>
+    process.env.DISCORD_BOT_TOKEN ? new DiscordAdapter(process.env.DISCORD_BOT_TOKEN) : null,
+};

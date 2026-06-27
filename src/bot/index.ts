@@ -11,23 +11,15 @@
  * (scheduled tasks) — back to the channel.
  */
 import { TeammateRuntime } from '../core/teammate-runtime.ts';
-import { DiscordAdapter } from '../platform/discord.ts';
-import { TelegramAdapter } from '../platform/telegram.ts';
-import type { PlatformAdapter } from '../platform/types.ts';
-
-function configuredAdapters(): PlatformAdapter[] {
-  const adapters: PlatformAdapter[] = [];
-  if (process.env.TELEGRAM_BOT_TOKEN) adapters.push(new TelegramAdapter(process.env.TELEGRAM_BOT_TOKEN));
-  if (process.env.DISCORD_BOT_TOKEN) adapters.push(new DiscordAdapter(process.env.DISCORD_BOT_TOKEN));
-  return adapters;
-}
+import { adapterFactories } from '../platform/adapters.ts';
+import { selectAdapters } from '../platform/registry.ts';
+import { runBotStart, runBotStop } from '../plugins/collect.ts';
 
 async function main(): Promise<void> {
-  const adapters = configuredAdapters();
+  const adapters = selectAdapters(adapterFactories);
   if (adapters.length === 0) {
-    console.error(
-      '[open-tag] No platform token set. Set TELEGRAM_BOT_TOKEN and/or DISCORD_BOT_TOKEN in .env.',
-    );
+    const hints = adapterFactories.map((f) => f.envHint).join(' and/or ');
+    console.error(`[open-tag] No platform token set. Set ${hints} in .env.`);
     process.exit(1);
   }
 
@@ -37,7 +29,9 @@ async function main(): Promise<void> {
 
   const shutdown = () => {
     console.log('\n[open-tag] shutting down…');
-    Promise.allSettled(adapters.map((a) => a.stop())).finally(() => process.exit(0));
+    Promise.allSettled([runBotStop(), ...adapters.map((a) => a.stop())]).finally(() =>
+      process.exit(0),
+    );
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
@@ -47,6 +41,8 @@ async function main(): Promise<void> {
   await Promise.all(adapters.map((a) => a.start()));
   // Re-tail known channels so output produced while the bot was down still renders.
   runtime.resume();
+  // Bot-side plugin startup (none built-in today; reserved for plugin-owned setup).
+  await runBotStart();
   console.log(`[open-tag] live on: ${adapters.map((a) => a.platform).join(', ')}`);
 }
 

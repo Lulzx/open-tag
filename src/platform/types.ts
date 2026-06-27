@@ -6,7 +6,14 @@
  * one new file implementing `PlatformAdapter`; nothing above this layer changes.
  */
 
-export type Platform = 'telegram' | 'discord' | 'slack';
+/**
+ * An open brand, not a closed union: each adapter declares its own id (Telegram
+ * uses `'telegram' as const`, etc.). A new platform needs no edit here — it just
+ * registers an `AdapterFactory` (see `registry.ts` / `adapters.ts`). Used only as
+ * a string component of the session key and the admin allowlist, so widening it
+ * to `string` changes no serialized form.
+ */
+export type Platform = string;
 
 /** Capability flags so the product layer can adapt without per-platform branches. */
 export interface PlatformCaps {
